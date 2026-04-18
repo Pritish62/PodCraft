@@ -2,28 +2,42 @@ import { useState } from 'react'
 import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import Loading from './loading'
+import Options from './options'
+import { buildPodcastPromptTemplate } from '../utils/promptTemplate'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
 function Home() {
-	const [inputText, setInputText] = useState('')
+	const [topic, setTopic] = useState('')
+	const [topicDetails, setTopicDetails] = useState('')
+	const [language, setLanguage] = useState('Hinglish')
+	const [tone, setTone] = useState('Casual')
+	const [hosts, setHosts] = useState(2)
 	const [answer, setAnswer] = useState('')
 	const [isGenerating, setIsGenerating] = useState(false)
 
 	const handleGenerate = async () => {
-		const trimmedInput = inputText.trim()
+		const trimmedTopic = topic.trim()
 
-		if (!trimmedInput) {
-			setAnswer('Please enter a prompt in the input section first.')
+		if (!trimmedTopic) {
+			setAnswer('Please enter a topic first.')
 			return
 		}
+
+		const promptInput = buildPodcastPromptTemplate({
+			topic,
+			topicDetails,
+			language,
+			tone,
+			hosts,
+		})
 
 		setIsGenerating(true)
 		setAnswer('')
 
 		try {
 			const response = await axios.post(`${API_BASE_URL}/api/gemini`, {
-				prompt: trimmedInput,
+				prompt: promptInput,
 			})
 
 			const generatedText = response?.data?.text?.trim() || 'No response returned from backend.'
@@ -46,19 +60,42 @@ function Home() {
 
 			<section className="mx-auto w-full max-w-4xl rounded-xl border border-zinc-300 bg-white p-5 sm:p-6">
 				<h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">PodCraft Home</h1>
-				<p className="mb-5 mt-2 text-sm text-zinc-600 sm:text-base">Enter your input and generate an answer.</p>
+				<p className="mb-5 mt-2 text-sm text-zinc-600 sm:text-base">Enter topic and details, then choose podcast options.</p>
 
-				<label htmlFor="prompt-input" className="mb-2 block text-sm font-semibold text-zinc-800 sm:text-base">
-					Input
+				<label htmlFor="topic-input" className="mb-2 block text-sm font-semibold text-zinc-800 sm:text-base">
+					Topic
+				</label>
+				<input
+					id="topic-input"
+					type="text"
+					className="mb-4 w-full rounded-md border border-black bg-white px-3 py-3 text-base text-zinc-900 outline-none focus:ring-2 focus:ring-black/20"
+					placeholder="Example: AI in daily life"
+					value={topic}
+					onChange={(event) => setTopic(event.target.value)}
+					disabled={isGenerating}
+				/>
+
+				<label htmlFor="topic-details" className="mb-2 block text-sm font-semibold text-zinc-800 sm:text-base">
+					Topic Details
 				</label>
 				<textarea
-					id="prompt-input"
+					id="topic-details"
 					className="mb-4 w-full resize-y rounded-md border border-black bg-white px-3 py-3 text-base text-zinc-900 outline-none focus:ring-2 focus:ring-black/20"
-					placeholder="Type your prompt here..."
-					value={inputText}
-					onChange={(event) => setInputText(event.target.value)}
+					placeholder="Add what should be covered in the podcast script..."
+					value={topicDetails}
+					onChange={(event) => setTopicDetails(event.target.value)}
 					disabled={isGenerating}
-					rows={7}
+					rows={5}
+				/>
+
+				<Options
+					language={language}
+					tone={tone}
+					hosts={hosts}
+					onLanguageChange={setLanguage}
+					onToneChange={setTone}
+					onHostsChange={setHosts}
+					disabled={isGenerating}
 				/>
 
 				<button
