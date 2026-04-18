@@ -11,7 +11,8 @@ app.use(express.json());
 
 const PORT = Number(process.env.PORT) || 8000;
 const GEMINI_API_KEY = (process.env.KEY || "").trim();
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-2.5-flash").trim() || "gemini-2.5-flash";
+const MAX_PROMPT_LENGTH = Number(process.env.MAX_PROMPT_LENGTH) || 8000;
 
 if (!GEMINI_API_KEY) {
 	console.warn("KEY is missing in environment variables.");
@@ -29,10 +30,17 @@ app.post("/api/gemini", async (req, res) => {
 			return res.status(500).json({ error: "Gemini API key is not configured" });
 		}
 
-		const { prompt } = req.body;
+		const rawPrompt = req.body?.prompt;
+		const prompt = typeof rawPrompt === "string" ? rawPrompt.trim() : "";
 
 		if (!prompt) {
 			return res.status(400).json({ error: "prompt is required" });
+		}
+
+		if (prompt.length > MAX_PROMPT_LENGTH) {
+			return res.status(400).json({
+				error: `prompt is too long (max ${MAX_PROMPT_LENGTH} characters)`,
+			});
 		}
 
 		const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });

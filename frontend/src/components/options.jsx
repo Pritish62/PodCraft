@@ -131,7 +131,7 @@ function Options({ language, tone, hosts, onLanguageChange, onToneChange, onHost
 			<OptionDropdown
 				id="hosts"
 				label="Hosts"
-				selectedValue={`${hosts}`}
+				selectedValue={hosts}
 				options={HOST_OPTIONS}
 				onSelect={(value) => handleSelect(onHostsChange, value)}
 				isOpen={openMenu === 'hosts'}

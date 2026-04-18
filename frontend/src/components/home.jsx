@@ -3,7 +3,14 @@ import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import Loading from './loading'
 import Options from './options'
-import { buildPodcastPromptTemplate } from '../utils/promptTemplate'
+import {
+	buildPodcastPromptTemplate,
+	normalizeHosts,
+	sanitizePodcastInputs,
+	TOPIC_DETAILS_MAX_LENGTH,
+	TOPIC_MAX_LENGTH,
+	validatePodcastInputs,
+} from '../utils/promptTemplate'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -17,14 +24,14 @@ function Home() {
 	const [isGenerating, setIsGenerating] = useState(false)
 
 	const handleGenerate = async () => {
-		const trimmedTopic = topic.trim()
+		const { isValid, errors } = validatePodcastInputs({ topic, topicDetails })
 
-		if (!trimmedTopic) {
-			setAnswer('Please enter a topic first.')
+		if (!isValid) {
+			setAnswer(`### Validation Error\n\n- ${errors.join('\n- ')}`)
 			return
 		}
 
-		const promptInput = buildPodcastPromptTemplate({
+		const safeInputs = sanitizePodcastInputs({
 			topic,
 			topicDetails,
 			language,
@@ -32,12 +39,20 @@ function Home() {
 			hosts,
 		})
 
+		setTopic(safeInputs.topic)
+		setTopicDetails(safeInputs.topicDetails)
+		setLanguage(safeInputs.language)
+		setTone(safeInputs.tone)
+		setHosts(safeInputs.hosts)
+
+		const templatePrompt = buildPodcastPromptTemplate(safeInputs)
+
 		setIsGenerating(true)
 		setAnswer('')
 
 		try {
 			const response = await axios.post(`${API_BASE_URL}/api/gemini`, {
-				prompt: promptInput,
+				prompt: templatePrompt,
 			})
 
 			const generatedText = response?.data?.text?.trim() || 'No response returned from backend.'
@@ -73,7 +88,9 @@ function Home() {
 					value={topic}
 					onChange={(event) => setTopic(event.target.value)}
 					disabled={isGenerating}
+					maxLength={TOPIC_MAX_LENGTH}
 				/>
+				<p className="mb-3 text-xs text-zinc-500">{topic.length}/{TOPIC_MAX_LENGTH}</p>
 
 				<label htmlFor="topic-details" className="mb-2 block text-sm font-semibold text-zinc-800 sm:text-base">
 					Topic Details
@@ -85,8 +102,10 @@ function Home() {
 					value={topicDetails}
 					onChange={(event) => setTopicDetails(event.target.value)}
 					disabled={isGenerating}
+					maxLength={TOPIC_DETAILS_MAX_LENGTH}
 					rows={5}
 				/>
+				<p className="mb-3 text-xs text-zinc-500">{topicDetails.length}/{TOPIC_DETAILS_MAX_LENGTH}</p>
 
 				<Options
 					language={language}
@@ -94,7 +113,7 @@ function Home() {
 					hosts={hosts}
 					onLanguageChange={setLanguage}
 					onToneChange={setTone}
-					onHostsChange={setHosts}
+					onHostsChange={(value) => setHosts(normalizeHosts(value))}
 					disabled={isGenerating}
 				/>
 
