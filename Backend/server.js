@@ -10,7 +10,8 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = Number(process.env.PORT) || 8000;
-const GEMINI_API_KEY = process.env.KEY || process.env.GEMINI_API_KEY;
+const GEMINI_API_KEY = (process.env.KEY || "").trim();
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
 if (!GEMINI_API_KEY) {
 	console.warn("KEY is missing in environment variables.");
@@ -34,13 +35,15 @@ app.post("/api/gemini", async (req, res) => {
 			return res.status(400).json({ error: "prompt is required" });
 		}
 
-		const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+		const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 		const result = await model.generateContent(prompt);
 		const text = result.response.text();
 
 		return res.json({ text });
 	} catch (error) {
-		return res.status(500).json({ error: error.message || "Gemini request failed" });
+		const message = error?.message || "Gemini request failed";
+		const causeMessage = error?.cause?.message;
+		return res.status(500).json({ error: causeMessage ? `${message}: ${causeMessage}` : message });
 	}
 });
 
