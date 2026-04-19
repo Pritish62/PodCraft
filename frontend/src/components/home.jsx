@@ -3,6 +3,7 @@ import axios from 'axios'
 import ReactMarkdown from 'react-markdown'
 import Loading from './loading'
 import Options from './options'
+import Sidebar from './sidebar'
 import {
 	buildPodcastPromptTemplate,
 	normalizeHosts,
@@ -14,7 +15,7 @@ import {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-function Home() {
+function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () => {} }) {
 	const [topic, setTopic] = useState('')
 	const [topicDetails, setTopicDetails] = useState('')
 	const [language, setLanguage] = useState('Hinglish')
@@ -22,6 +23,16 @@ function Home() {
 	const [hosts, setHosts] = useState(2)
 	const [answer, setAnswer] = useState('')
 	const [isGenerating, setIsGenerating] = useState(false)
+	const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+
+	const handleNewChat = () => {
+		setTopic('')
+		setTopicDetails('')
+		setLanguage('Hinglish')
+		setTone('Casual')
+		setHosts(2)
+		setAnswer('')
+	}
 
 	const handleGenerate = async () => {
 		const { isValid, errors } = validatePodcastInputs({ topic, topicDetails })
@@ -51,9 +62,19 @@ function Home() {
 		setAnswer('')
 
 		try {
-			const response = await axios.post(`${API_BASE_URL}/api/gemini`, {
-				prompt: templatePrompt,
-			})
+			const response = await axios.post(
+				`${API_BASE_URL}/api/gemini`,
+				{
+					prompt: templatePrompt,
+				},
+				{
+					headers: authToken
+						? {
+							Authorization: `Bearer ${authToken}`,
+						}
+						: undefined,
+				}
+			)
 
 			const generatedText = response?.data?.text?.trim() || 'No response returned from backend.'
 			setAnswer(generatedText)
@@ -66,7 +87,26 @@ function Home() {
 	}
 
 	return (
-		<main className="min-h-screen bg-white px-4 py-8 text-zinc-900 sm:py-10">
+		<div className="min-h-screen bg-white text-zinc-900">
+			<Sidebar
+				isOpen={isSidebarOpen}
+				onClose={() => setIsSidebarOpen(false)}
+				onNewChat={handleNewChat}
+				onLogout={onLogout}
+				userEmail={userEmail}
+			/>
+
+			{!isSidebarOpen ? (
+				<button
+					type="button"
+					onClick={() => setIsSidebarOpen(true)}
+					className="fixed left-4 top-4 z-20 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm font-semibold text-zinc-800"
+				>
+					Menu
+				</button>
+			) : null}
+
+			<main className={`min-h-screen px-4 py-8 sm:py-10 ${isSidebarOpen ? 'md:pl-[21rem]' : ''}`}>
 			{isGenerating ? (
 				<div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm">
 					<Loading />
@@ -145,7 +185,8 @@ function Home() {
 					)}
 				</section>
 			</section>
-		</main>
+			</main>
+		</div>
 	)
 }
 
