@@ -1,47 +1,220 @@
-import { useId } from 'react'
+import {
+	useState,
+	useRef,
+	useEffect,
+	useId,
+	useMemo,
+	useCallback,
+} from 'react'
 import { motion } from 'framer-motion'
 
-function GooeyInput({ value, onChange, placeholder = 'Search chats...' }) {
-	const filterId = useId().replace(/:/g, '')
+function cn(...parts) {
+	return parts.filter(Boolean).join(' ')
+}
+
+function GooeyFilter({ filterId, blur }) {
+	return (
+		<svg className="absolute hidden h-0 w-0" aria-hidden="true" focusable="false">
+			<defs>
+				<filter id={filterId} x="-50%" y="-50%" width="200%" height="200%">
+					<feGaussianBlur in="SourceGraphic" stdDeviation={blur} result="blur" />
+					<feColorMatrix
+						in="blur"
+						type="matrix"
+						values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 20 -10"
+						result="goo"
+					/>
+					<feComposite in="SourceGraphic" in2="goo" operator="atop" />
+				</filter>
+			</defs>
+		</svg>
+	)
+}
+
+function SearchIcon({ layoutId }) {
+	return (
+		<motion.svg
+			layoutId={layoutId}
+			xmlns="http://www.w3.org/2000/svg"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			strokeWidth={2}
+			className="size-4 shrink-0"
+		>
+			<circle cx="11" cy="11" r="8" />
+			<path d="m21 21-4.3-4.3" />
+		</motion.svg>
+	)
+}
+
+const transition = {
+	duration: 0.4,
+	type: 'spring',
+	bounce: 0.25,
+}
+
+const iconBubbleVariants = {
+	collapsed: { scale: 0, opacity: 0 },
+	expanded: { scale: 1, opacity: 1 },
+}
+
+function GooeyInput({
+	placeholder = 'Type to search...',
+	className,
+	classNames,
+	collapsedWidth = 115,
+	expandedWidth = 220,
+	expandedOffset = 50,
+	gooeyBlur = 5,
+	value: valueProp,
+	defaultValue = '',
+	onValueChange,
+	onOpenChange,
+	disabled = false,
+}) {
+	const reactId = useId()
+	const safeId = reactId.replace(/:/g, '')
+	const filterId = `gooey-filter-${safeId}`
+	const iconLayoutId = `gooey-input-icon-${safeId}`
+	const inputLayoutId = `gooey-input-field-${safeId}`
+
+	const inputRef = useRef(null)
+	const prevExpandedRef = useRef(false)
+	const [isExpanded, setIsExpanded] = useState(false)
+	const [uncontrolledValue, setUncontrolledValue] = useState(defaultValue)
+
+	const isControlled = valueProp !== undefined
+	const searchText = isControlled ? valueProp : uncontrolledValue
+
+	const setSearchText = useCallback(
+		(next) => {
+			if (!isControlled) {
+				setUncontrolledValue(next)
+			}
+			if (onValueChange) {
+				onValueChange(next)
+			}
+		},
+		[isControlled, onValueChange]
+	)
+
+	const setExpanded = useCallback(
+		(next) => {
+			setIsExpanded(next)
+			if (onOpenChange) {
+				onOpenChange(next)
+			}
+		},
+		[onOpenChange]
+	)
+
+	useEffect(() => {
+		if (isExpanded) {
+			inputRef.current?.focus()
+		} else if (prevExpandedRef.current) {
+			setSearchText('')
+		}
+		prevExpandedRef.current = isExpanded
+	}, [isExpanded, setSearchText])
+
+	const buttonVariants = useMemo(
+		() => ({
+			collapsed: { width: collapsedWidth, marginLeft: 0 },
+			expanded: { width: expandedWidth, marginLeft: expandedOffset },
+		}),
+		[collapsedWidth, expandedWidth, expandedOffset]
+	)
+
+	const handleExpand = useCallback(() => {
+		if (!disabled) {
+			setExpanded(true)
+		}
+	}, [disabled, setExpanded])
+
+	const handleChange = useCallback(
+		(event) => {
+			setSearchText(event.target.value)
+		},
+		[setSearchText]
+	)
+
+	const handleBlur = useCallback(() => {
+		if (!searchText) {
+			setExpanded(false)
+		}
+	}, [searchText, setExpanded])
+
+	const surfaceClass = 'bg-zinc-900 text-white shadow-sm ring-1 ring-zinc-800/60'
 
 	return (
-		<div className="relative">
-			<svg className="pointer-events-none absolute h-0 w-0" aria-hidden="true" focusable="false">
-				<defs>
-					<filter id={filterId}>
-						<feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur" />
-						<feColorMatrix
-							in="blur"
-							mode="matrix"
-							values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -11"
-							result="goo"
+		<div className={cn('relative flex items-center justify-center', className, classNames?.root)}>
+			<GooeyFilter filterId={filterId} blur={gooeyBlur} />
+
+			<div
+				className={cn('relative flex h-10 items-center justify-center', classNames?.filterWrap)}
+				style={{ filter: `url(#${filterId})` }}
+			>
+				<motion.div
+					className={cn('flex h-10 items-center justify-center', classNames?.buttonRow)}
+					variants={buttonVariants}
+					initial="collapsed"
+					animate={isExpanded ? 'expanded' : 'collapsed'}
+					transition={transition}
+				>
+					<button
+						type="button"
+						disabled={disabled}
+						onClick={handleExpand}
+						className={cn(
+							'flex h-10 w-full cursor-pointer items-center justify-center gap-2 rounded-full px-4 text-sm font-medium outline-none transition-[color,box-shadow] focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:pointer-events-none disabled:opacity-50',
+							surfaceClass,
+							classNames?.trigger
+						)}
+					>
+						{!isExpanded ? <SearchIcon layoutId={iconLayoutId} /> : null}
+						<motion.input
+							layoutId={inputLayoutId}
+							ref={inputRef}
+							type="search"
+							enterKeyHint="search"
+							autoComplete="off"
+							value={searchText}
+							onChange={handleChange}
+							onBlur={handleBlur}
+							disabled={disabled || !isExpanded}
+							placeholder={placeholder}
+							className={cn(
+								'h-full min-w-0 flex-1 bg-transparent text-sm text-white outline-none',
+								isExpanded ? 'placeholder:text-white/50' : 'pointer-events-none placeholder:text-white/80',
+								classNames?.input
+							)}
 						/>
-						<feBlend in="SourceGraphic" in2="goo" />
-					</filter>
-				</defs>
-			</svg>
+					</button>
+				</motion.div>
 
-			<div className="relative" style={{ filter: `url(#${filterId})` }}>
-				<motion.span
-					aria-hidden="true"
-					className="pointer-events-none absolute -left-2 top-1/2 h-3 w-3 rounded-full bg-zinc-200"
-					animate={{ y: ['-50%', '-70%', '-50%'], x: [0, 8, 0] }}
-					transition={{ duration: 2.1, repeat: Infinity, ease: 'easeInOut' }}
-				/>
-				<motion.span
-					aria-hidden="true"
-					className="pointer-events-none absolute -right-2 top-1/2 h-2.5 w-2.5 rounded-full bg-zinc-300"
-					animate={{ y: ['-50%', '-35%', '-50%'], x: [0, -8, 0] }}
-					transition={{ duration: 1.9, repeat: Infinity, ease: 'easeInOut' }}
-				/>
-
-				<input
-					type="text"
-					value={value}
-					onChange={onChange}
-					placeholder={placeholder}
-					className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-800 outline-none transition focus:border-zinc-400"
-				/>
+				<motion.div
+					className={cn(
+						'absolute left-0 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center',
+						classNames?.bubble
+					)}
+					variants={iconBubbleVariants}
+					initial="collapsed"
+					animate={isExpanded ? 'expanded' : 'collapsed'}
+					transition={transition}
+				>
+					<div
+						className={cn(
+							'flex size-10 items-center justify-center rounded-full',
+							surfaceClass,
+							classNames?.bubbleSurface
+						)}
+					>
+						<SearchIcon layoutId={iconLayoutId} />
+					</div>
+				</motion.div>
 			</div>
 		</div>
 	)

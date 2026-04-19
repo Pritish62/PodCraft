@@ -57,7 +57,7 @@ function Sidebar({
 						animate={{ x: 0 }}
 						exit={{ x: '-100%' }}
 						transition={{ type: 'spring', stiffness: 300, damping: 32 }}
-						className="fixed left-0 top-0 z-40 h-screen w-80 border-r border-zinc-200 bg-white"
+						className="fixed left-0 top-0 z-40 h-screen w-80 border-r border-zinc-200 bg-[#F3F3F3]"
 					>
 						<div className="relative h-full px-4 pb-24 pt-5">
 							<div className="mb-6">
@@ -88,7 +88,7 @@ function Sidebar({
 							<div className="mb-5">
 								<GooeyInput
 									value={searchValue}
-									onChange={(event) => setSearchValue(event.target.value)}
+									onValueChange={setSearchValue}
 									placeholder="Search chat history"
 								/>
 							</div>
@@ -110,7 +110,7 @@ function Sidebar({
 								</ul>
 							</div>
 
-							<div className="absolute bottom-0 left-0 right-0 border-t border-zinc-200 bg-white px-4 py-3">
+							<div className="absolute bottom-0 left-0 right-0 border-t border-zinc-200 bg-[#F3F3F3] px-4 py-3">
 								<div className="flex items-center gap-3">
 									<img
 										src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80&q=80&auto=format&fit=crop"
