@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import Loading from './loading'
 import Options from './options'
 import Sidebar from './sidebar'
+import { useChatHistory } from '../features/history/hooks/useChatHistory'
 import {
 	buildPodcastPromptTemplate,
 	normalizeHosts,
@@ -24,6 +25,7 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 	const [answer, setAnswer] = useState('')
 	const [isGenerating, setIsGenerating] = useState(false)
 	const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+	const { historyItems, isHistoryLoading, historyError, refreshHistory } = useChatHistory(authToken)
 
 	const handleNewChat = () => {
 		setTopic('')
@@ -78,6 +80,7 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 
 			const generatedText = response?.data?.text?.trim() || 'No response returned from backend.'
 			setAnswer(generatedText)
+			await refreshHistory()
 		} catch (error) {
 			const errorMessage = error?.response?.data?.error || error?.message || 'Request failed.'
 			setAnswer(`### Error\n\n${errorMessage}`)
@@ -94,6 +97,9 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 				onNewChat={handleNewChat}
 				onLogout={onLogout}
 				userEmail={userEmail}
+				chatHistory={historyItems}
+				isHistoryLoading={isHistoryLoading}
+				historyError={historyError}
 			/>
 
 			{!isSidebarOpen ? (

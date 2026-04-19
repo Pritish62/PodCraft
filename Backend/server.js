@@ -7,6 +7,9 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const User = require("./models/User");
+const ChatHistory = require("./models/ChatHistory");
+const { requireAuth } = require("./middleware/auth");
+const historyRoutes = require("./routes/historyRoutes");
 
 const app = express();
 
@@ -69,26 +72,6 @@ function extractTopicFromPrompt(prompt) {
 	return topicLine ? topicLine.replace("Topic:", "").trim() : "";
 }
 
-async function requireAuth(req, res, next) {
-	try {
-		const authHeader = req.headers.authorization || "";
-		if (!authHeader.startsWith("Bearer ")) {
-			return res.status(401).json({ error: "Authorization token is required" });
-		}
-
-		const token = authHeader.slice(7).trim();
-		if (!token) {
-			return res.status(401).json({ error: "Authorization token is required" });
-		}
-
-		const payload = jwt.verify(token, JWT_SECRET);
-		req.userId = payload.userId;
-		next();
-	} catch (error) {
-		return res.status(401).json({ error: "Invalid or expired token" });
-	}
-}
-
 async function connectDatabase() {
 	if (!MONGO_KEY) {
 		return;
@@ -105,6 +88,8 @@ async function connectDatabase() {
 app.get("/", (req, res) => {
 	res.json({ message: "Backend server is running" });
 });
+
+app.use("/api/history", historyRoutes);
 
 app.post("/api/auth/signup", async (req, res) => {
 	try {
@@ -227,19 +212,14 @@ app.post("/api/gemini", requireAuth, async (req, res) => {
 		const text = result.response.text();
 
 		if (MONGO_KEY) {
-			await User.findByIdAndUpdate(
-				req.userId,
-				{
-					$push: {
-						history: {
-							topic: extractTopicFromPrompt(prompt),
-							prompt,
-							response: text,
-						},
-					},
-				},
-				{ new: false }
-			);
+			const extractedTopic = extractTopicFromPrompt(prompt);
+			await ChatHistory.create({
+				userId: req.userId,
+				title: extractedTopic || "Untitled Chat",
+				topic: extractedTopic,
+				prompt,
+				response: text,
+			});
 		}
 
 		return res.json({ text });

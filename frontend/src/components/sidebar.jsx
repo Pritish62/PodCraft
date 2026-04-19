@@ -31,12 +31,24 @@ function Sidebar({
 	onNewChat,
 	onLogout,
 	chatHistory = DUMMY_CHATS,
+	isHistoryLoading = false,
+	historyError = '',
 	userEmail = 'user@example.com',
 }) {
 	const [searchValue, setSearchValue] = useState('')
+	const normalizedChats = chatHistory.map((chat, index) => {
+		if (typeof chat === 'string') {
+			return { id: `dummy-${index}`, title: chat }
+		}
 
-	const filteredChats = chatHistory.filter((chat) =>
-		chat.toLowerCase().includes(searchValue.trim().toLowerCase())
+		return {
+			id: chat.id || `history-${index}`,
+			title: chat.title || chat.topic || 'Untitled Chat',
+		}
+	})
+
+	const filteredChats = normalizedChats.filter((chat) =>
+		chat.title.toLowerCase().includes(searchValue.trim().toLowerCase())
 	)
 
 	return (
@@ -96,18 +108,29 @@ function Sidebar({
 							<div className="h-[calc(100%-154px)] overflow-y-auto pr-1">
 								<p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Chat History</p>
 								{/* TODO: Fetch and map chat history data from MongoDB. */}
-								<ul className="space-y-1">
-									{filteredChats.map((chatTitle) => (
-										<li key={chatTitle}>
-											<button
-												type="button"
-												className="w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-900"
-											>
-												{chatTitle}
-											</button>
-										</li>
-									))}
-								</ul>
+								{isHistoryLoading ? (
+									<p className="px-1 py-2 text-sm text-zinc-500">Loading history...</p>
+								) : null}
+								{historyError ? (
+									<p className="px-1 py-2 text-sm text-red-600">{historyError}</p>
+								) : null}
+								{!isHistoryLoading && !historyError && filteredChats.length === 0 ? (
+									<p className="px-1 py-2 text-sm text-zinc-500">No chats yet. Generate your first podcast script.</p>
+								) : null}
+								{!isHistoryLoading && !historyError ? (
+									<ul className="space-y-1">
+										{filteredChats.map((chat) => (
+											<li key={chat.id}>
+												<button
+													type="button"
+													className="w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-900"
+												>
+													{chat.title}
+												</button>
+											</li>
+										))}
+									</ul>
+								) : null}
 							</div>
 
 							<div className="absolute bottom-0 left-0 right-0 border-t border-zinc-200 bg-[#F3F3F3] px-4 py-3">
