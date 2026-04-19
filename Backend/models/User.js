@@ -1,30 +1,5 @@
 const mongoose = require("mongoose");
 
-const historyItemSchema = new mongoose.Schema(
-	{
-		topic: {
-			type: String,
-			default: "",
-			trim: true,
-		},
-		prompt: {
-			type: String,
-			required: true,
-			trim: true,
-		},
-		response: {
-			type: String,
-			default: "",
-			trim: true,
-		},
-		createdAt: {
-			type: Date,
-			default: Date.now,
-		},
-	},
-	{ _id: false }
-);
-
 const userSchema = new mongoose.Schema(
 	{
 		email: {
@@ -43,10 +18,6 @@ const userSchema = new mongoose.Schema(
 		passwordHash: {
 			type: String,
 			required: true,
-		},
-		history: {
-			type: [historyItemSchema],
-			default: [],
 		},
 	},
 	{

@@ -5,11 +5,10 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
 const User = require("./models/User");
-const ChatHistory = require("./models/ChatHistory");
 const { requireAuth } = require("./middleware/auth");
 const historyRoutes = require("./routes/historyRoutes");
+const projectRoutes = require("./routes/projectRoutes");
 
 const app = express();
 
@@ -17,9 +16,6 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = Number(process.env.PORT) || 8000;
-const GEMINI_API_KEY = (process.env.KEY || "").trim();
-const GEMINI_MODEL = (process.env.GEMINI_MODEL || "gemini-2.5-flash").trim() || "gemini-2.5-flash";
-const MAX_PROMPT_LENGTH = Number(process.env.MAX_PROMPT_LENGTH) || 8000;
 const MONGO_KEY = (process.env.MONGO_KEY || "").trim();
 const JWT_SECRET = (process.env.JWT_SECRET || "dev-secret-change-me").trim();
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "7d";
@@ -29,10 +25,6 @@ const EMAIL_MAX_LENGTH = 254;
 const MOBILE_REGEX = /^[0-9]{10,15}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-if (!GEMINI_API_KEY) {
-	console.warn("KEY is missing in environment variables.");
-}
-
 if (!MONGO_KEY) {
 	console.warn("MONGO_KEY is missing in environment variables.");
 }
@@ -40,8 +32,6 @@ if (!MONGO_KEY) {
 if (JWT_SECRET === "dev-secret-change-me") {
 	console.warn("JWT_SECRET is using default value. Set JWT_SECRET in .env for production.");
 }
-
-const genAI = GEMINI_API_KEY ? new GoogleGenerativeAI(GEMINI_API_KEY) : null;
 
 function normalizeEmail(email) {
 	if (typeof email !== "string") {
@@ -63,15 +53,6 @@ function createAuthToken(userId) {
 	return jwt.sign({ userId }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
 
-function extractTopicFromPrompt(prompt) {
-	if (typeof prompt !== "string") {
-		return "";
-	}
-
-	const topicLine = prompt.split("\n").find((line) => line.startsWith("Topic:"));
-	return topicLine ? topicLine.replace("Topic:", "").trim() : "";
-}
-
 async function connectDatabase() {
 	if (!MONGO_KEY) {
 		return;
@@ -90,6 +71,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/history", historyRoutes);
+app.use("/api/projects", projectRoutes);
 
 app.post("/api/auth/signup", async (req, res) => {
 	try {
@@ -185,48 +167,6 @@ app.get("/api/auth/me", requireAuth, async (req, res) => {
 		});
 	} catch (error) {
 		return res.status(500).json({ error: error.message || "Failed to fetch user" });
-	}
-});
-
-app.post("/api/gemini", requireAuth, async (req, res) => {
-	try {
-		if (!genAI) {
-			return res.status(500).json({ error: "Gemini API key is not configured" });
-		}
-
-		const rawPrompt = req.body?.prompt;
-		const prompt = typeof rawPrompt === "string" ? rawPrompt.trim() : "";
-
-		if (!prompt) {
-			return res.status(400).json({ error: "prompt is required" });
-		}
-
-		if (prompt.length > MAX_PROMPT_LENGTH) {
-			return res.status(400).json({
-				error: `prompt is too long (max ${MAX_PROMPT_LENGTH} characters)`,
-			});
-		}
-
-		const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
-		const result = await model.generateContent(prompt);
-		const text = result.response.text();
-
-		if (MONGO_KEY) {
-			const extractedTopic = extractTopicFromPrompt(prompt);
-			await ChatHistory.create({
-				userId: req.userId,
-				title: extractedTopic || "Untitled Chat",
-				topic: extractedTopic,
-				prompt,
-				response: text,
-			});
-		}
-
-		return res.json({ text });
-	} catch (error) {
-		const message = error?.message || "Gemini request failed";
-		const causeMessage = error?.cause?.message;
-		return res.status(500).json({ error: causeMessage ? `${message}: ${causeMessage}` : message });
 	}
 });
 

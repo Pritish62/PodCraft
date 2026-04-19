@@ -2,14 +2,6 @@ import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import GooeyInput from './ui/gooey-input'
 
-const DUMMY_CHATS = [
-	'AI tools for students',
-	'Podcast intro ideas',
-	'Daily productivity hacks',
-	'Future of content creators',
-	'How to grow an audience',
-]
-
 function LogoutIcon() {
 	return (
 		<svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4">
@@ -30,20 +22,23 @@ function Sidebar({
 	onClose,
 	onNewChat,
 	onLogout,
-	chatHistory = DUMMY_CHATS,
+	projects = [],
+	activeProjectId = null,
+	onSelectProject,
 	isHistoryLoading = false,
 	historyError = '',
 	userEmail = 'user@example.com',
 }) {
 	const [searchValue, setSearchValue] = useState('')
-	const normalizedChats = chatHistory.map((chat, index) => {
+	const normalizedChats = projects.map((chat, index) => {
 		if (typeof chat === 'string') {
 			return { id: `dummy-${index}`, title: chat }
 		}
 
 		return {
 			id: chat.id || `history-${index}`,
-			title: chat.title || chat.topic || 'Untitled Chat',
+			title: chat.projectName || chat.title || chat.topic || 'Untitled Chat',
+			raw: chat,
 		}
 	})
 
@@ -107,7 +102,6 @@ function Sidebar({
 
 							<div className="h-[calc(100%-154px)] overflow-y-auto pr-1">
 								<p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Chat History</p>
-								{/* TODO: Fetch and map chat history data from MongoDB. */}
 								{isHistoryLoading ? (
 									<p className="px-1 py-2 text-sm text-zinc-500">Loading history...</p>
 								) : null}
@@ -123,7 +117,12 @@ function Sidebar({
 											<li key={chat.id}>
 												<button
 													type="button"
-													className="w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-900"
+													onClick={() => onSelectProject?.(chat.raw || chat)}
+													className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+														activeProjectId === chat.id
+															? 'bg-zinc-200 text-zinc-900'
+															: 'text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900'
+													}`}
 												>
 													{chat.title}
 												</button>
