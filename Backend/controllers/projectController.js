@@ -158,7 +158,7 @@ async function getProjectById(req, res) {
 async function createProject(req, res) {
 	try {
 		const payload = sanitizeProjectPayload(req.body, { withDefaults: false });
-		const projectName = payload.projectName || payload.topic || "Untitled Project";
+		const projectName = payload.topic || payload.projectName || "Untitled Project";
 
 		const project = await Project.create({
 			userId: req.userId,
@@ -192,7 +192,7 @@ async function updateProjectById(req, res) {
 		}
 
 		const payload = sanitizeProjectPayload(req.body, { withDefaults: false });
-		project.projectName = payload.projectName || payload.topic || project.projectName || "Untitled Project";
+		project.projectName = payload.topic || payload.projectName || project.projectName || "Untitled Project";
 		project.topic = payload.topic;
 		project.details = payload.details;
 		project.language = payload.language;
@@ -241,7 +241,7 @@ async function generateProjectScript(req, res) {
 		const outputScript = result?.response?.text?.().trim() || "No response returned from backend.";
 
 		const rawProjectId = typeof req.body?.projectId === "string" ? req.body.projectId.trim() : "";
-		const projectName = payload.projectName || payload.topic || "Untitled Project";
+		const projectName = payload.topic || payload.projectName || "Untitled Project";
 		let project;
 
 		if (rawProjectId) {

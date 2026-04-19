@@ -1,9 +1,9 @@
 import { useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import Loading from './loading'
 import Options from './options'
 import Sidebar from './sidebar'
 import {
-	createProjectRequest,
 	generateProjectRequest,
 	updateProjectRequest,
 } from '../features/projects/api/projectsApi'
@@ -30,6 +30,28 @@ function createBlankProject() {
 	}
 }
 
+const outputContainerVariants = {
+	hidden: { opacity: 0, y: 12 },
+	visible: {
+		opacity: 1,
+		y: 0,
+		transition: {
+			duration: 0.25,
+			staggerChildren: 0.05,
+			delayChildren: 0.06,
+		},
+	},
+}
+
+const outputLineVariants = {
+	hidden: { opacity: 0, y: 8 },
+	visible: {
+		opacity: 1,
+		y: 0,
+		transition: { duration: 0.2 },
+	},
+}
+
 function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () => {} }) {
 	const [currentProject, setCurrentProject] = useState(createBlankProject())
 	const [isGenerating, setIsGenerating] = useState(false)
@@ -49,8 +71,15 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 				[field]: value,
 			}
 
-			if (!nextProject.projectName && field === 'topic') {
-				nextProject.projectName = value
+			if (field === 'topic') {
+				const shouldSyncTitle =
+					!previousProject.id ||
+					!previousProject.projectName ||
+					previousProject.projectName === previousProject.topic
+
+				if (shouldSyncTitle) {
+					nextProject.projectName = value
+				}
 			}
 
 			return nextProject
@@ -61,7 +90,7 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 		setProjectActionError('')
 
 		const payload = {
-			projectName: projectData.projectName || projectData.topic || 'Untitled Project',
+			projectName: projectData.topic || projectData.projectName || 'Untitled Project',
 			topic: projectData.topic,
 			details: projectData.details,
 			language: projectData.language,
@@ -77,9 +106,7 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 				return
 			}
 
-			const savedProject = projectData.id
-				? await updateProjectRequest(authToken, projectData.id, payload)
-				: await createProjectRequest(authToken, payload)
+			const savedProject = await updateProjectRequest(authToken, projectData.id, payload)
 
 			if (savedProject) {
 				setCurrentProject(savedProject)
@@ -127,7 +154,7 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 		try {
 			const savedProject = await generateProjectRequest(authToken, {
 				projectId: projectData.id || undefined,
-				projectName: projectData.projectName || safeInputs.topic || 'Untitled Project',
+				projectName: safeInputs.topic || projectData.projectName || 'Untitled Project',
 				topic: safeInputs.topic,
 				details: safeInputs.topicDetails,
 				language: safeInputs.language,
@@ -147,6 +174,8 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 			setIsGenerating(false)
 		}
 	}
+
+	const outputLines = projectData.outputScript.split('\n')
 
 	return (
 		<div className="min-h-screen bg-white text-zinc-900">
@@ -180,85 +209,150 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 				</div>
 			) : null}
 
-			<section className="mx-auto w-full max-w-4xl rounded-xl border border-zinc-300 bg-white p-5 sm:p-6">
-				<h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">PodCraft Home</h1>
-				<p className="mb-5 mt-2 text-sm text-zinc-600 sm:text-base">Enter topic and details, then choose podcast options.</p>
-
-				<label htmlFor="topic-input" className="mb-2 block text-sm font-semibold text-zinc-800 sm:text-base">
-					Topic
-				</label>
-				<input
-					id="topic-input"
-					type="text"
-					className="mb-4 w-full rounded-md border border-black bg-white px-3 py-3 text-base text-zinc-900 outline-none focus:ring-2 focus:ring-black/20"
-					placeholder="Example: AI in daily life"
-					value={projectData.topic}
-					onChange={(event) => updateProjectField('topic', event.target.value)}
-					disabled={isGenerating}
-					maxLength={TOPIC_MAX_LENGTH}
-				/>
-				<p className="mb-3 text-xs text-zinc-500">{projectData.topic.length}/{TOPIC_MAX_LENGTH}</p>
-
-				<label htmlFor="topic-details" className="mb-2 block text-sm font-semibold text-zinc-800 sm:text-base">
-					Topic Details
-				</label>
-				<textarea
-					id="topic-details"
-					className="mb-4 w-full resize-y rounded-md border border-black bg-white px-3 py-3 text-base text-zinc-900 outline-none focus:ring-2 focus:ring-black/20"
-					placeholder="Add what should be covered in the podcast script..."
-					value={projectData.details}
-					onChange={(event) => updateProjectField('details', event.target.value)}
-					disabled={isGenerating}
-					maxLength={TOPIC_DETAILS_MAX_LENGTH}
-					rows={5}
-				/>
-				<p className="mb-3 text-xs text-zinc-500">{projectData.details.length}/{TOPIC_DETAILS_MAX_LENGTH}</p>
-
-				<Options
-					language={projectData.language}
-					tone={projectData.tone}
-					hosts={projectData.hosts}
-					onLanguageChange={(value) => updateProjectField('language', value)}
-					onToneChange={(value) => updateProjectField('tone', value)}
-					onHostsChange={(value) => updateProjectField('hosts', normalizeHosts(value))}
-					disabled={isBusy}
-				/>
-
-				<div className="mb-5 flex flex-wrap items-center gap-2">
-					<button
-						type="button"
-						className="inline-flex items-center rounded-md border border-black bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-70 sm:text-base"
-						onClick={handleGenerate}
-						disabled={isBusy}
-					>
-						{isGenerating ? 'Generating...' : 'Generate Answer'}
-					</button>
-					{canShowSaveButton ? (
-						<button
-							type="button"
-							className="inline-flex items-center rounded-md border border-zinc-400 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-70 sm:text-base"
-							onClick={saveProject}
-							disabled={isBusy || (!projectData.topic && !projectData.details && !projectData.outputScript)}
-						>
-							{isSavingProject ? 'Saving...' : 'Save Project'}
-						</button>
-					) : null}
+			<section className="mx-auto w-full max-w-7xl">
+				<div className="mb-6 rounded-2xl border border-zinc-200 bg-gradient-to-r from-zinc-50 via-white to-zinc-50 p-5 sm:p-6">
+					<h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Podcast Script Workspace</h1>
+					<p className="mt-2 text-sm text-zinc-600 sm:text-base">
+						Write podcast scripts at light speed.
+					</p>
 				</div>
 
-				{projectActionError ? (
-					<p className="mb-4 text-sm text-red-600">{projectActionError}</p>
-				) : null}
+				<div className="grid gap-6 xl:grid-cols-[1.05fr_1fr]">
+					<article className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:p-6">
+						<div className="mb-5">
+							<h2 className="text-xl font-semibold text-zinc-900 sm:text-2xl">Project Brief</h2>
+						</div>
 
-				<label className="mb-2 block text-sm font-semibold text-zinc-800 sm:text-base">Output</label>
-				<textarea
-					className="min-h-48 w-full resize-y rounded-md border border-black bg-white p-4 text-base text-zinc-900 outline-none focus:ring-2 focus:ring-black/20"
-					aria-live="polite"
-					placeholder="Your generated answer will appear here."
-					value={projectData.outputScript}
-					onChange={(event) => updateProjectField('outputScript', event.target.value)}
-					disabled={isGenerating}
-					rows={10}
-				/>
+						<label htmlFor="topic-input" className="mb-2 block text-sm font-semibold text-zinc-800">
+							Topic
+						</label>
+						<input
+							id="topic-input"
+							type="text"
+							className="mb-2 w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-base text-zinc-900 outline-none transition focus:border-zinc-500 focus:ring-4 focus:ring-zinc-200/70"
+							placeholder="Example: AI in daily life"
+							value={projectData.topic}
+							onChange={(event) => updateProjectField('topic', event.target.value)}
+							disabled={isGenerating}
+							maxLength={TOPIC_MAX_LENGTH}
+						/>
+						<div className="mb-5 flex justify-end text-xs text-zinc-500">{projectData.topic.length}/{TOPIC_MAX_LENGTH}</div>
+
+						<label htmlFor="topic-details" className="mb-2 block text-sm font-semibold text-zinc-800">
+							Topic Details
+						</label>
+						<textarea
+							id="topic-details"
+							className="mb-2 w-full resize-y rounded-xl border border-zinc-300 bg-white px-4 py-3 text-base text-zinc-900 outline-none transition focus:border-zinc-500 focus:ring-4 focus:ring-zinc-200/70"
+							placeholder="Add context, structure, audience and key points for your script..."
+							value={projectData.details}
+							onChange={(event) => updateProjectField('details', event.target.value)}
+							disabled={isGenerating}
+							maxLength={TOPIC_DETAILS_MAX_LENGTH}
+							rows={7}
+						/>
+						<div className="mb-5 flex justify-end text-xs text-zinc-500">{projectData.details.length}/{TOPIC_DETAILS_MAX_LENGTH}</div>
+
+						<Options
+							language={projectData.language}
+							tone={projectData.tone}
+							hosts={projectData.hosts}
+							onLanguageChange={(value) => updateProjectField('language', value)}
+							onToneChange={(value) => updateProjectField('tone', value)}
+							onHostsChange={(value) => updateProjectField('hosts', normalizeHosts(value))}
+							disabled={isBusy}
+						/>
+
+						<div className="mt-6 flex flex-wrap items-center gap-2">
+							<button
+								type="button"
+								className="inline-flex items-center rounded-xl border border-black bg-black px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-70 sm:text-base"
+								onClick={handleGenerate}
+								disabled={isBusy}
+							>
+								{isGenerating ? 'Generating...' : 'Generate Answer'}
+							</button>
+							{canShowSaveButton ? (
+								<button
+									type="button"
+									className="inline-flex items-center rounded-xl border border-zinc-300 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-70 sm:text-base"
+									onClick={saveProject}
+									disabled={isBusy || (!projectData.topic && !projectData.details && !projectData.outputScript)}
+								>
+									{isSavingProject ? 'Saving...' : 'Save Project'}
+								</button>
+							) : null}
+						</div>
+
+						{projectActionError ? (
+							<p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{projectActionError}</p>
+						) : null}
+					</article>
+
+					<article className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] sm:p-6">
+						<div className="mb-5 flex items-center justify-between">
+							<div>
+								<h2 className="text-xl font-semibold text-zinc-900 sm:text-2xl">Output</h2>
+							</div>
+							<span className={`rounded-full px-3 py-1 text-xs font-medium ${isGenerating ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+								{isGenerating ? 'Generating' : 'Ready'}
+							</span>
+						</div>
+
+						<div className="min-h-[280px] rounded-2xl border border-zinc-200 bg-gradient-to-b from-zinc-50 to-white p-4 sm:p-5">
+							{isGenerating ? (
+								<motion.div
+									initial={{ opacity: 0.4 }}
+									animate={{ opacity: [0.4, 1, 0.4] }}
+									transition={{ duration: 1.2, repeat: Infinity }}
+									className="space-y-3"
+								>
+									<div className="h-4 w-4/5 rounded bg-zinc-200" />
+									<div className="h-4 w-full rounded bg-zinc-200" />
+									<div className="h-4 w-11/12 rounded bg-zinc-200" />
+									<div className="h-4 w-3/4 rounded bg-zinc-200" />
+								</motion.div>
+							) : (
+								<AnimatePresence mode="wait">
+									{projectData.outputScript ? (
+										<motion.div
+											key={projectData.outputScript}
+											variants={outputContainerVariants}
+											initial="hidden"
+											animate="visible"
+											exit="hidden"
+											className="space-y-2"
+										>
+											{outputLines.map((line, index) => (
+												line.trim() ? (
+													<motion.p
+														key={`${index}-${line.slice(0, 20)}`}
+														variants={outputLineVariants}
+														className="whitespace-pre-wrap text-[15px] leading-7 text-zinc-700"
+													>
+														{line}
+													</motion.p>
+												) : (
+													<div key={`blank-${index}`} className="h-3" />
+												)
+											))}
+										</motion.div>
+									) : (
+										<motion.p
+											key="empty-output"
+											initial={{ opacity: 0, y: 8 }}
+											animate={{ opacity: 1, y: 0 }}
+											exit={{ opacity: 0, y: -8 }}
+											className="text-sm leading-7 text-zinc-500"
+										>
+											Your generated script will appear here.
+										</motion.p>
+									)}
+								</AnimatePresence>
+							)}
+						</div>
+					</article>
+				</div>
 			</section>
 			</main>
 		</div>

@@ -35,9 +35,13 @@ function Sidebar({
 			return { id: `dummy-${index}`, title: chat }
 		}
 
+		const topicTitle = typeof chat.topic === 'string' ? chat.topic.trim() : ''
+		const projectTitle = typeof chat.projectName === 'string' ? chat.projectName.trim() : ''
+		const historyTitle = typeof chat.title === 'string' ? chat.title.trim() : ''
+
 		return {
 			id: chat.id || `history-${index}`,
-			title: chat.projectName || chat.title || chat.topic || 'Untitled Chat',
+			title: topicTitle || projectTitle || historyTitle || 'Untitled Project',
 			raw: chat,
 		}
 	})
@@ -86,9 +90,9 @@ function Sidebar({
 									onClick={onNewChat}
 									whileHover={{ scale: 1.02 }}
 									whileTap={{ scale: 0.95 }}
-									className="w-full rounded-xl bg-black px-3 py-2.5 text-sm font-semibold text-white"
+									className="w-full cursor-pointer rounded-xl bg-black px-3 py-2.5 text-sm font-semibold text-white"
 								>
-									+ New Chat
+									+ New Project
 								</motion.button>
 							</div>
 
@@ -96,12 +100,12 @@ function Sidebar({
 								<GooeyInput
 									value={searchValue}
 									onValueChange={setSearchValue}
-									placeholder="Search chat history"
+									placeholder="Search recent projects"
 								/>
 							</div>
 
 							<div className="h-[calc(100%-154px)] overflow-y-auto pr-1">
-								<p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Chat History</p>
+								<p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Recent Projects</p>
 								{isHistoryLoading ? (
 									<p className="px-1 py-2 text-sm text-zinc-500">Loading history...</p>
 								) : null}
@@ -109,7 +113,7 @@ function Sidebar({
 									<p className="px-1 py-2 text-sm text-red-600">{historyError}</p>
 								) : null}
 								{!isHistoryLoading && !historyError && filteredChats.length === 0 ? (
-									<p className="px-1 py-2 text-sm text-zinc-500">No chats yet. Generate your first podcast script.</p>
+									<p className="px-1 py-2 text-sm text-zinc-500">No projects yet. Generate your first podcast script.</p>
 								) : null}
 								{!isHistoryLoading && !historyError ? (
 									<ul className="space-y-1">
@@ -118,10 +122,10 @@ function Sidebar({
 												<button
 													type="button"
 													onClick={() => onSelectProject?.(chat.raw || chat)}
-													className={`w-full rounded-lg px-3 py-2 text-left text-sm transition ${
+													className={`w-full cursor-pointer rounded-lg px-3 py-2 text-left text-sm transition ${
 														activeProjectId === chat.id
-															? 'bg-zinc-200 text-zinc-900'
-															: 'text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900'
+															? 'bg-zinc-200 text-zinc-900 hover:bg-zinc-300'
+															: 'text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900'
 													}`}
 												>
 													{chat.title}
