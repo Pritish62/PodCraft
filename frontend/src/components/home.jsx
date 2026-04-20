@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import Loading from './loading'
 import Options from './options'
@@ -27,42 +27,123 @@ function createBlankProject() {
 		hosts: '',
 		prompt: '',
 		outputScript: '',
+		versions: [],
 	}
 }
 
-const outputContainerVariants = {
-	hidden: { opacity: 0, y: 12 },
-	visible: {
-		opacity: 1,
-		y: 0,
-		transition: {
-			duration: 0.25,
-			staggerChildren: 0.05,
-			delayChildren: 0.06,
-		},
-	},
+function normalizeProjectVersions(project = {}) {
+	const incomingVersions = Array.isArray(project.versions) ? project.versions : []
+	const normalizedVersions = incomingVersions
+		.filter((version) => version && typeof version.versionNumber === 'number')
+		.map((version) => ({
+			versionNumber: version.versionNumber,
+			prompt: version.prompt || '',
+			outputScript: version.outputScript || '',
+			createdAt: version.createdAt,
+		}))
+		.sort((a, b) => a.versionNumber - b.versionNumber)
+
+	if (normalizedVersions.length > 0) {
+		return normalizedVersions
+	}
+
+	if (project.outputScript) {
+		return [
+			{
+				versionNumber: 1,
+				prompt: project.prompt || '',
+				outputScript: project.outputScript,
+				createdAt: project.updatedAt,
+			},
+		]
+	}
+
+	return []
 }
 
-const outputLineVariants = {
-	hidden: { opacity: 0, y: 8 },
-	visible: {
-		opacity: 1,
-		y: 0,
-		transition: { duration: 0.2 },
-	},
+function normalizeProjectForUi(project = {}) {
+	const normalizedVersions = normalizeProjectVersions(project)
+	const latestVersion = normalizedVersions[normalizedVersions.length - 1]
+	const resolvedOutputScript =
+		typeof project.outputScript === 'string' && project.outputScript.length > 0
+			? project.outputScript
+			: latestVersion?.outputScript || ''
+
+	return {
+		...createBlankProject(),
+		...project,
+		outputScript: resolvedOutputScript,
+		versions: normalizedVersions,
+	}
+}
+
+function getLatestVersionNumber(versions = []) {
+	if (!versions.length) {
+		return null
+	}
+
+	return versions[versions.length - 1].versionNumber
+}
+
+function getSelectionOffsets(container, range) {
+	const preRange = range.cloneRange()
+	preRange.selectNodeContents(container)
+	preRange.setEnd(range.startContainer, range.startOffset)
+
+	const start = preRange.toString().length
+	const selectedText = range.toString()
+	const end = start + selectedText.length
+
+	return { start, end, selectedText }
 }
 
 function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () => {} }) {
 	const [currentProject, setCurrentProject] = useState(createBlankProject())
+	const [activeVersionNumber, setActiveVersionNumber] = useState(null)
+	const [outputViewKey, setOutputViewKey] = useState(0)
 	const [isGenerating, setIsGenerating] = useState(false)
 	const [isSavingProject, setIsSavingProject] = useState(false)
 	const [projectActionError, setProjectActionError] = useState('')
 	const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+	const [highlightAction, setHighlightAction] = useState({
+		isVisible: false,
+		x: 0,
+		y: 0,
+		start: 0,
+		end: 0,
+		selectedText: '',
+		editedText: '',
+	})
 	const { projects, isProjectsLoading, projectsError, upsertProject } = useProjects(authToken)
+	const outputContentRef = useRef(null)
+	const outputSurfaceRef = useRef(null)
+	const highlightPopupRef = useRef(null)
 
 	const projectData = currentProject
+	const projectVersions = normalizeProjectVersions(projectData)
 	const isBusy = isGenerating || isSavingProject
 	const canShowSaveButton = Boolean(projectData.id)
+	const canRegenerate = Boolean(projectData.id)
+
+	useEffect(() => {
+		const handleOutsideClick = (event) => {
+			if (!highlightAction.isVisible) {
+				return
+			}
+
+			const clickedInsideEditor = outputContentRef.current?.contains(event.target)
+			const clickedInsidePopup = highlightPopupRef.current?.contains(event.target)
+
+			if (!clickedInsideEditor && !clickedInsidePopup) {
+				setHighlightAction((previous) => ({ ...previous, isVisible: false }))
+			}
+		}
+
+		document.addEventListener('mousedown', handleOutsideClick)
+		return () => {
+			document.removeEventListener('mousedown', handleOutsideClick)
+		}
+	}, [highlightAction.isVisible])
 
 	const updateProjectField = (field, value) => {
 		setCurrentProject((previousProject) => {
@@ -89,28 +170,33 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 	const saveProject = async () => {
 		setProjectActionError('')
 
+		const normalizedProject = normalizeProjectForUi(projectData)
+		const latestVersion = getLatestVersionNumber(normalizedProject.versions)
+
 		const payload = {
-			projectName: projectData.topic || projectData.projectName || 'Untitled Project',
-			topic: projectData.topic,
-			details: projectData.details,
-			language: projectData.language,
-			tone: projectData.tone,
-			hosts: projectData.hosts,
-			prompt: projectData.prompt,
-			outputScript: projectData.outputScript,
+			projectName: normalizedProject.topic || normalizedProject.projectName || 'Untitled Project',
+			topic: normalizedProject.topic,
+			details: normalizedProject.details,
+			language: normalizedProject.language,
+			tone: normalizedProject.tone,
+			hosts: normalizedProject.hosts,
+			prompt: normalizedProject.prompt,
+			outputScript: normalizedProject.outputScript,
 		}
 
 		setIsSavingProject(true)
 		try {
-			if (!projectData.id) {
+			if (!normalizedProject.id) {
 				return
 			}
 
-			const savedProject = await updateProjectRequest(authToken, projectData.id, payload)
+			const savedProject = await updateProjectRequest(authToken, normalizedProject.id, payload)
 
 			if (savedProject) {
-				setCurrentProject(savedProject)
-				upsertProject(savedProject)
+				const nextProject = normalizeProjectForUi(savedProject)
+				setCurrentProject(nextProject)
+				setActiveVersionNumber(latestVersion)
+				upsertProject(nextProject)
 			}
 		} catch (error) {
 			setProjectActionError(error?.response?.data?.error || error?.message || 'Failed to save project.')
@@ -121,12 +207,18 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 
 	const handleNewChat = () => {
 		setCurrentProject(createBlankProject())
+		setActiveVersionNumber(null)
+		setOutputViewKey((previous) => previous + 1)
 		setProjectActionError('')
 	}
 
 	const handleSelectProject = (project) => {
-		setCurrentProject({ ...project })
+		const nextProject = normalizeProjectForUi(project)
+		setCurrentProject(nextProject)
+		setActiveVersionNumber(getLatestVersionNumber(nextProject.versions))
+		setOutputViewKey((previous) => previous + 1)
 		setProjectActionError('')
+		setHighlightAction((previous) => ({ ...previous, isVisible: false }))
 	}
 
 	const handleGenerate = async () => {
@@ -137,6 +229,7 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 
 		if (!isValid) {
 			updateProjectField('outputScript', `Validation Error:\n- ${errors.join('\n- ')}`)
+			setHighlightAction((previous) => ({ ...previous, isVisible: false }))
 			return
 		}
 
@@ -163,19 +256,97 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 			})
 
 			if (savedProject) {
-				setCurrentProject(savedProject)
-				upsertProject(savedProject)
+				const nextProject = normalizeProjectForUi(savedProject)
+				setCurrentProject(nextProject)
+				setActiveVersionNumber(getLatestVersionNumber(nextProject.versions))
+				setOutputViewKey((previous) => previous + 1)
+				upsertProject(nextProject)
+				setHighlightAction((previous) => ({ ...previous, isVisible: false }))
 			}
 		} catch (error) {
 			const errorMessage = error?.response?.data?.error || error?.message || 'Request failed.'
 			updateProjectField('outputScript', `Error:\n${errorMessage}`)
 			setProjectActionError(errorMessage)
+			setHighlightAction((previous) => ({ ...previous, isVisible: false }))
 		} finally {
 			setIsGenerating(false)
 		}
 	}
 
-	const outputLines = projectData.outputScript.split('\n')
+	const handleSelectionChange = () => {
+		if (!outputContentRef.current || !outputSurfaceRef.current) {
+			return
+		}
+
+		const selection = window.getSelection()
+		if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+			setHighlightAction((previous) => ({ ...previous, isVisible: false }))
+			return
+		}
+
+		const range = selection.getRangeAt(0)
+		if (!outputContentRef.current.contains(range.commonAncestorContainer)) {
+			setHighlightAction((previous) => ({ ...previous, isVisible: false }))
+			return
+		}
+
+		const offsets = getSelectionOffsets(outputContentRef.current, range)
+		if (!offsets.selectedText.trim()) {
+			setHighlightAction((previous) => ({ ...previous, isVisible: false }))
+			return
+		}
+
+		const selectionRect = range.getBoundingClientRect()
+		const surfaceRect = outputSurfaceRef.current.getBoundingClientRect()
+		const rawX = selectionRect.left - surfaceRect.left + selectionRect.width / 2
+		const rawY = selectionRect.top - surfaceRect.top - 10
+		const x = Math.min(surfaceRect.width - 20, Math.max(20, rawX))
+		const y = Math.max(8, rawY)
+
+		setHighlightAction({
+			isVisible: true,
+			x,
+			y,
+			start: offsets.start,
+			end: offsets.end,
+			selectedText: offsets.selectedText,
+			editedText: offsets.selectedText,
+		})
+	}
+
+	const applyHighlightEdit = () => {
+		if (!highlightAction.isVisible) {
+			return
+		}
+
+		const sourceText = projectData.outputScript || ''
+		const nextText =
+			sourceText.slice(0, highlightAction.start) +
+			highlightAction.editedText +
+			sourceText.slice(highlightAction.end)
+
+		updateProjectField('outputScript', nextText)
+		setOutputViewKey((previous) => previous + 1)
+		setActiveVersionNumber(null)
+		setHighlightAction((previous) => ({ ...previous, isVisible: false }))
+	}
+
+	const handleSelectVersion = (versionNumber) => {
+		const selectedVersion = projectVersions.find((version) => version.versionNumber === versionNumber)
+		if (!selectedVersion) {
+			return
+		}
+
+		updateProjectField('outputScript', selectedVersion.outputScript || '')
+		setActiveVersionNumber(selectedVersion.versionNumber)
+		setOutputViewKey((previous) => previous + 1)
+		setHighlightAction((previous) => ({ ...previous, isVisible: false }))
+
+		const selection = window.getSelection()
+		if (selection) {
+			selection.removeAllRanges()
+		}
+	}
 
 	return (
 		<div className="min-h-screen bg-white text-zinc-900">
@@ -270,7 +441,7 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 								onClick={handleGenerate}
 								disabled={isBusy}
 							>
-								{isGenerating ? 'Generating...' : 'Generate Answer'}
+								{isGenerating ? (canRegenerate ? 'Regenerating...' : 'Generating...') : (canRegenerate ? 'Regenerate' : 'Generate Answer')}
 							</button>
 							{canShowSaveButton ? (
 								<button
@@ -299,7 +470,33 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 							</span>
 						</div>
 
-						<div className="min-h-[280px] rounded-2xl border border-zinc-200 bg-gradient-to-b from-zinc-50 to-white p-4 sm:p-5">
+						{projectVersions.length > 0 ? (
+							<div className="mb-4 flex flex-wrap items-center gap-2">
+								{projectVersions.map((version) => {
+									const isActive = activeVersionNumber === version.versionNumber
+
+									return (
+										<button
+											key={`version-${version.versionNumber}`}
+											type="button"
+											onClick={() => handleSelectVersion(version.versionNumber)}
+											className={`cursor-pointer rounded-full border px-3 py-1 text-xs font-semibold transition ${
+												isActive
+													? 'border-black bg-black text-white'
+													: 'border-zinc-300 bg-white text-zinc-700 hover:border-zinc-500 hover:bg-zinc-100'
+											}`}
+										>
+											v{version.versionNumber}
+										</button>
+									)
+								})}
+							</div>
+						) : null}
+
+						<div
+							ref={outputSurfaceRef}
+							className="relative min-h-[280px] rounded-2xl border border-zinc-200 bg-gradient-to-b from-zinc-50 to-white p-4 sm:p-5"
+						>
 							{isGenerating ? (
 								<motion.div
 									initial={{ opacity: 0.4 }}
@@ -313,42 +510,71 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 									<div className="h-4 w-3/4 rounded bg-zinc-200" />
 								</motion.div>
 							) : (
-								<AnimatePresence mode="wait">
-									{projectData.outputScript ? (
+								<>
+									<AnimatePresence mode="wait" initial={false}>
 										<motion.div
-											key={projectData.outputScript}
-											variants={outputContainerVariants}
-											initial="hidden"
-											animate="visible"
-											exit="hidden"
-											className="space-y-2"
-										>
-											{outputLines.map((line, index) => (
-												line.trim() ? (
-													<motion.p
-														key={`${index}-${line.slice(0, 20)}`}
-														variants={outputLineVariants}
-														className="whitespace-pre-wrap text-[15px] leading-7 text-zinc-700"
-													>
-														{line}
-													</motion.p>
-												) : (
-													<div key={`blank-${index}`} className="h-3" />
-												)
-											))}
-										</motion.div>
-									) : (
-										<motion.p
-											key="empty-output"
+											key={`output-view-${outputViewKey}`}
 											initial={{ opacity: 0, y: 8 }}
 											animate={{ opacity: 1, y: 0 }}
 											exit={{ opacity: 0, y: -8 }}
-											className="text-sm leading-7 text-zinc-500"
+											transition={{ duration: 0.22 }}
 										>
-											Your generated script will appear here.
-										</motion.p>
-									)}
-								</AnimatePresence>
+											{!projectData.outputScript ? (
+												<p className="pointer-events-none mb-2 text-sm leading-7 text-zinc-500">
+													Your generated script will appear here.
+												</p>
+											) : null}
+											<div
+												ref={outputContentRef}
+												onMouseUp={handleSelectionChange}
+												className="min-h-[220px] whitespace-pre-wrap rounded-xl border border-transparent p-2 text-[15px] leading-7 text-zinc-700"
+											>
+												{projectData.outputScript}
+											</div>
+										</motion.div>
+									</AnimatePresence>
+
+									<AnimatePresence>
+										{highlightAction.isVisible ? (
+											<motion.div
+												ref={highlightPopupRef}
+												initial={{ opacity: 0, y: 6, scale: 0.96 }}
+												animate={{ opacity: 1, y: 0, scale: 1 }}
+												exit={{ opacity: 0, y: 6, scale: 0.96 }}
+												transition={{ duration: 0.18 }}
+												className="absolute z-20 w-72 rounded-xl border border-zinc-200 bg-white p-3 shadow-xl"
+												style={{ left: highlightAction.x, top: highlightAction.y, transform: 'translate(-50%, -100%)' }}
+											>
+												<p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Edit selection</p>
+												<textarea
+													className="mb-2 w-full resize-none rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-200"
+													rows={3}
+													value={highlightAction.editedText}
+													onChange={(event) => {
+														const nextValue = event.target.value
+														setHighlightAction((previous) => ({ ...previous, editedText: nextValue }))
+													}}
+												/>
+												<div className="flex items-center justify-end gap-2">
+													<button
+														type="button"
+														onClick={() => setHighlightAction((previous) => ({ ...previous, isVisible: false }))}
+														className="rounded-md border border-zinc-300 px-2.5 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-100"
+													>
+														Cancel
+													</button>
+													<button
+														type="button"
+														onClick={applyHighlightEdit}
+														className="rounded-md border border-black bg-black px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-zinc-800"
+													>
+														Apply
+													</button>
+												</div>
+											</motion.div>
+										) : null}
+									</AnimatePresence>
+								</>
 							)}
 						</div>
 					</article>

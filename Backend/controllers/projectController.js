@@ -94,6 +94,17 @@ function buildPodcastPromptTemplate({ topic, details, language, tone, hosts }) {
 }
 
 function toProjectResponse(projectDoc) {
+	const versions = Array.isArray(projectDoc.versions) ? projectDoc.versions : [];
+	const normalizedVersions = versions
+		.filter((version) => version && typeof version.versionNumber === "number")
+		.sort((a, b) => a.versionNumber - b.versionNumber)
+		.map((version) => ({
+			versionNumber: version.versionNumber,
+			prompt: version.prompt || "",
+			outputScript: version.outputScript || "",
+			createdAt: version.createdAt,
+		}));
+
 	return {
 		id: String(projectDoc._id),
 		projectName: projectDoc.projectName,
@@ -104,6 +115,7 @@ function toProjectResponse(projectDoc) {
 		hosts: projectDoc.hosts,
 		prompt: projectDoc.prompt || "",
 		outputScript: projectDoc.outputScript || "",
+		versions: normalizedVersions,
 		createdAt: projectDoc.createdAt,
 		updatedAt: projectDoc.updatedAt,
 	};
@@ -170,6 +182,15 @@ async function createProject(req, res) {
 			hosts: payload.hosts,
 			outputScript: payload.outputScript,
 			prompt: typeof req.body?.prompt === "string" ? req.body.prompt : "",
+			versions: payload.outputScript
+				? [
+					{
+						versionNumber: 1,
+						prompt: typeof req.body?.prompt === "string" ? req.body.prompt : "",
+						outputScript: payload.outputScript,
+					},
+				]
+				: [],
 		});
 
 		return res.status(201).json({ project: toProjectResponse(project) });
@@ -253,6 +274,12 @@ async function generateProjectScript(req, res) {
 		}
 
 		if (!project) {
+			const firstVersion = {
+				versionNumber: 1,
+				prompt,
+				outputScript,
+			};
+
 			project = new Project({
 				userId: req.userId,
 				projectName,
@@ -263,8 +290,34 @@ async function generateProjectScript(req, res) {
 				hosts: payload.hosts,
 				prompt,
 				outputScript,
+				versions: [firstVersion],
 			});
 		} else {
+			const existingVersions = Array.isArray(project.versions) ? project.versions : [];
+
+			if (existingVersions.length === 0 && project.outputScript) {
+				existingVersions.push({
+					versionNumber: 1,
+					prompt: project.prompt || "",
+					outputScript: project.outputScript,
+				});
+			}
+
+			const lastVersionNumber = existingVersions.reduce((maxVersion, version) => {
+				if (!version || typeof version.versionNumber !== "number") {
+					return maxVersion;
+				}
+
+				return Math.max(maxVersion, version.versionNumber);
+			}, 0);
+
+			existingVersions.push({
+				versionNumber: lastVersionNumber + 1,
+				prompt,
+				outputScript,
+			});
+
+			project.versions = existingVersions;
 			project.projectName = projectName;
 			project.topic = payload.topic;
 			project.details = payload.details;

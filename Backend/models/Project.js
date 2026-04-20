@@ -1,5 +1,30 @@
 const mongoose = require("mongoose");
 
+const projectVersionSchema = new mongoose.Schema(
+	{
+		versionNumber: {
+			type: Number,
+			required: true,
+			min: 1,
+		},
+		prompt: {
+			type: String,
+			default: "",
+			trim: true,
+		},
+		outputScript: {
+			type: String,
+			default: "",
+			trim: true,
+		},
+		createdAt: {
+			type: Date,
+			default: Date.now,
+		},
+	},
+	{ _id: false }
+);
+
 const projectSchema = new mongoose.Schema(
 	{
 		userId: {
@@ -53,6 +78,10 @@ const projectSchema = new mongoose.Schema(
 			type: String,
 			default: "",
 			trim: true,
+		},
+		versions: {
+			type: [projectVersionSchema],
+			default: [],
 		},
 	},
 	{
