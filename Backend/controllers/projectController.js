@@ -182,15 +182,7 @@ async function createProject(req, res) {
 			hosts: payload.hosts,
 			outputScript: payload.outputScript,
 			prompt: typeof req.body?.prompt === "string" ? req.body.prompt : "",
-			versions: payload.outputScript
-				? [
-					{
-						versionNumber: 1,
-						prompt: typeof req.body?.prompt === "string" ? req.body.prompt : "",
-						outputScript: payload.outputScript,
-					},
-				]
-				: [],
+			versions: [],
 		});
 
 		return res.status(201).json({ project: toProjectResponse(project) });
@@ -274,12 +266,6 @@ async function generateProjectScript(req, res) {
 		}
 
 		if (!project) {
-			const firstVersion = {
-				versionNumber: 1,
-				prompt,
-				outputScript,
-			};
-
 			project = new Project({
 				userId: req.userId,
 				projectName,
@@ -290,7 +276,7 @@ async function generateProjectScript(req, res) {
 				hosts: payload.hosts,
 				prompt,
 				outputScript,
-				versions: [firstVersion],
+				versions: [],
 			});
 		} else {
 			const existingVersions = Array.isArray(project.versions) ? project.versions : [];

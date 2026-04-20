@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import GooeyInput from './ui/gooey-input'
+import PodcraftLogo from './ui/PodcraftLogo'
 
 function LogoutIcon() {
 	return (
@@ -73,7 +74,10 @@ function Sidebar({
 						<div className="relative h-full px-4 pb-24 pt-5">
 							<div className="mb-6">
 								<div className="mb-4 flex items-center justify-between">
-									<h1 className="text-2xl font-bold tracking-tight text-zinc-900">Podcraft</h1>
+									<div className="flex items-center gap-2">
+										<PodcraftLogo className="h-8 w-8" />
+										<h1 className="text-2xl font-bold tracking-tight text-zinc-900">Podcraft</h1>
+									</div>
 									{onClose ? (
 										<button
 											type="button"
@@ -128,7 +132,7 @@ function Sidebar({
 															: 'text-zinc-700 hover:bg-zinc-200 hover:text-zinc-900'
 													}`}
 												>
-													{chat.title}
+													<span className="block truncate">{chat.title}</span>
 												</button>
 											</li>
 										))}

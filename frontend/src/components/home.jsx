@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import Loading from './loading'
 import Options from './options'
 import Sidebar from './sidebar'
+import ActionPopup from './ui/ActionPopup'
 import {
 	generateProjectRequest,
 	updateProjectRequest,
@@ -47,17 +48,6 @@ function normalizeProjectVersions(project = {}) {
 		return normalizedVersions
 	}
 
-	if (project.outputScript) {
-		return [
-			{
-				versionNumber: 1,
-				prompt: project.prompt || '',
-				outputScript: project.outputScript,
-				createdAt: project.updatedAt,
-			},
-		]
-	}
-
 	return []
 }
 
@@ -97,14 +87,31 @@ function getSelectionOffsets(container, range) {
 	return { start, end, selectedText }
 }
 
+function createDownloadFileName(topic = '', versionNumber = null) {
+	const safeTopic = (topic || 'podcast-script')
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+	const baseName = safeTopic || 'podcast-script'
+	const versionSuffix = typeof versionNumber === 'number' ? `-v${versionNumber}` : '-draft'
+
+	return `${baseName}${versionSuffix}.txt`
+}
+
 function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () => {} }) {
 	const [currentProject, setCurrentProject] = useState(createBlankProject())
 	const [activeVersionNumber, setActiveVersionNumber] = useState(null)
 	const [outputViewKey, setOutputViewKey] = useState(0)
+	const [isOutputExpanded, setIsOutputExpanded] = useState(false)
 	const [isGenerating, setIsGenerating] = useState(false)
 	const [isSavingProject, setIsSavingProject] = useState(false)
 	const [projectActionError, setProjectActionError] = useState('')
 	const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+	const [isLogoutPopupOpen, setIsLogoutPopupOpen] = useState(false)
+	const [missingOptionsPopup, setMissingOptionsPopup] = useState({
+		isOpen: false,
+		description: '',
+	})
 	const [highlightAction, setHighlightAction] = useState({
 		isVisible: false,
 		x: 0,
@@ -124,6 +131,10 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 	const isBusy = isGenerating || isSavingProject
 	const canShowSaveButton = Boolean(projectData.id)
 	const canRegenerate = Boolean(projectData.id)
+	const hasOutputScript = Boolean((projectData.outputScript || '').trim())
+	const hasVersionControl = projectVersions.length > 1
+	const isOutputLong = (projectData.outputScript || '').length > 900 || (projectData.outputScript.match(/\n/g)?.length || 0) > 12
+	const canShowLoadMore = hasOutputScript && !isOutputExpanded && isOutputLong
 
 	useEffect(() => {
 		const handleOutsideClick = (event) => {
@@ -195,7 +206,7 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 			if (savedProject) {
 				const nextProject = normalizeProjectForUi(savedProject)
 				setCurrentProject(nextProject)
-				setActiveVersionNumber(latestVersion)
+				setActiveVersionNumber(nextProject.versions.length > 1 ? latestVersion : null)
 				upsertProject(nextProject)
 			}
 		} catch (error) {
@@ -209,19 +220,40 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 		setCurrentProject(createBlankProject())
 		setActiveVersionNumber(null)
 		setOutputViewKey((previous) => previous + 1)
+		setIsOutputExpanded(false)
 		setProjectActionError('')
 	}
 
 	const handleSelectProject = (project) => {
 		const nextProject = normalizeProjectForUi(project)
 		setCurrentProject(nextProject)
-		setActiveVersionNumber(getLatestVersionNumber(nextProject.versions))
+		setActiveVersionNumber(nextProject.versions.length > 1 ? getLatestVersionNumber(nextProject.versions) : null)
 		setOutputViewKey((previous) => previous + 1)
+		setIsOutputExpanded(false)
 		setProjectActionError('')
 		setHighlightAction((previous) => ({ ...previous, isVisible: false }))
 	}
 
 	const handleGenerate = async () => {
+		const missingOptions = []
+		if (!projectData.language) {
+			missingOptions.push('Language')
+		}
+		if (!projectData.tone) {
+			missingOptions.push('Tone')
+		}
+		if (!projectData.hosts) {
+			missingOptions.push('Hosts')
+		}
+
+		if (missingOptions.length > 0) {
+			setMissingOptionsPopup({
+				isOpen: true,
+				description: `Please select desired options: ${missingOptions.join(', ')}.`,
+			})
+			return
+		}
+
 		const { isValid, errors } = validatePodcastInputs({
 			topic: projectData.topic,
 			topicDetails: projectData.details,
@@ -258,8 +290,9 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 			if (savedProject) {
 				const nextProject = normalizeProjectForUi(savedProject)
 				setCurrentProject(nextProject)
-				setActiveVersionNumber(getLatestVersionNumber(nextProject.versions))
+				setActiveVersionNumber(nextProject.versions.length > 1 ? getLatestVersionNumber(nextProject.versions) : null)
 				setOutputViewKey((previous) => previous + 1)
+				setIsOutputExpanded(false)
 				upsertProject(nextProject)
 				setHighlightAction((previous) => ({ ...previous, isVisible: false }))
 			}
@@ -327,6 +360,7 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 
 		updateProjectField('outputScript', nextText)
 		setOutputViewKey((previous) => previous + 1)
+		setIsOutputExpanded(false)
 		setActiveVersionNumber(null)
 		setHighlightAction((previous) => ({ ...previous, isVisible: false }))
 	}
@@ -340,6 +374,7 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 		updateProjectField('outputScript', selectedVersion.outputScript || '')
 		setActiveVersionNumber(selectedVersion.versionNumber)
 		setOutputViewKey((previous) => previous + 1)
+		setIsOutputExpanded(false)
 		setHighlightAction((previous) => ({ ...previous, isVisible: false }))
 
 		const selection = window.getSelection()
@@ -348,13 +383,45 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 		}
 	}
 
+	const handleDownloadScript = () => {
+		if (!hasOutputScript) {
+			return
+		}
+
+		const fileName = createDownloadFileName(projectData.topic, activeVersionNumber)
+		const fileContent = projectData.outputScript
+		const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' })
+		const objectUrl = URL.createObjectURL(blob)
+
+		const downloadLink = document.createElement('a')
+		downloadLink.href = objectUrl
+		downloadLink.download = fileName
+		document.body.appendChild(downloadLink)
+		downloadLink.click()
+		document.body.removeChild(downloadLink)
+		URL.revokeObjectURL(objectUrl)
+	}
+
+	const requestLogout = () => {
+		setIsLogoutPopupOpen(true)
+	}
+
+	const confirmLogout = () => {
+		setIsLogoutPopupOpen(false)
+		onLogout()
+	}
+
+	const closeLogoutPopup = () => {
+		setIsLogoutPopupOpen(false)
+	}
+
 	return (
-		<div className="min-h-screen bg-white text-zinc-900">
+		<div className="min-h-screen bg-[#F3F3F3] text-zinc-900">
 			<Sidebar
 				isOpen={isSidebarOpen}
 				onClose={() => setIsSidebarOpen(false)}
 				onNewChat={handleNewChat}
-				onLogout={onLogout}
+				onLogout={requestLogout}
 				userEmail={userEmail}
 				projects={projects}
 				activeProjectId={projectData.id || null}
@@ -373,7 +440,7 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 				</button>
 			) : null}
 
-			<main className={`min-h-screen px-4 py-8 sm:py-10 ${isSidebarOpen ? 'md:pl-[21rem]' : ''}`}>
+			<main className={`min-h-screen bg-[#F3F3F3] px-4 py-8 sm:py-10 ${isSidebarOpen ? 'md:pl-[21rem]' : ''}`}>
 			{isGenerating ? (
 				<div className="fixed inset-0 z-50 flex items-center justify-center bg-white/80 backdrop-blur-sm">
 					<Loading />
@@ -381,7 +448,7 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 			) : null}
 
 			<section className="mx-auto w-full max-w-7xl">
-				<div className="mb-6 rounded-2xl border border-zinc-200 bg-gradient-to-r from-zinc-50 via-white to-zinc-50 p-5 sm:p-6">
+				<div className="mb-6 rounded-2xl border border-zinc-200 bg-white p-5 sm:p-6">
 					<h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Podcast Script Workspace</h1>
 					<p className="mt-2 text-sm text-zinc-600 sm:text-base">
 						Write podcast scripts at light speed.
@@ -465,12 +532,23 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 							<div>
 								<h2 className="text-xl font-semibold text-zinc-900 sm:text-2xl">Output</h2>
 							</div>
-							<span className={`rounded-full px-3 py-1 text-xs font-medium ${isGenerating ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
-								{isGenerating ? 'Generating' : 'Ready'}
-							</span>
+							<div className="flex items-center gap-2">
+								{hasOutputScript ? (
+									<button
+										type="button"
+										onClick={handleDownloadScript}
+										className="cursor-pointer rounded-lg bg-gradient-to-r from-violet-600 to-fuchsia-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:from-violet-700 hover:to-fuchsia-600"
+									>
+										Download Script
+									</button>
+								) : null}
+								<span className={`rounded-full px-3 py-1 text-xs font-medium ${isGenerating ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>
+									{isGenerating ? 'Generating' : 'Ready'}
+								</span>
+							</div>
 						</div>
 
-						{projectVersions.length > 0 ? (
+						{hasVersionControl ? (
 							<div className="mb-4 flex flex-wrap items-center gap-2">
 								{projectVersions.map((version) => {
 									const isActive = activeVersionNumber === version.versionNumber
@@ -495,7 +573,7 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 
 						<div
 							ref={outputSurfaceRef}
-							className="relative min-h-[280px] rounded-2xl border border-zinc-200 bg-gradient-to-b from-zinc-50 to-white p-4 sm:p-5"
+							className="relative min-h-[280px] rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5"
 						>
 							{isGenerating ? (
 								<motion.div
@@ -527,10 +605,26 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 											<div
 												ref={outputContentRef}
 												onMouseUp={handleSelectionChange}
-												className="min-h-[220px] whitespace-pre-wrap rounded-xl border border-transparent p-2 text-[15px] leading-7 text-zinc-700"
+												className={`min-h-[220px] whitespace-pre-wrap rounded-xl border border-transparent p-2 text-[15px] leading-7 text-zinc-700 ${
+													canShowLoadMore ? 'max-h-[380px] overflow-hidden' : ''
+												}`}
 											>
 												{projectData.outputScript}
 											</div>
+											{canShowLoadMore ? (
+												<>
+													<div className="pointer-events-none absolute bottom-16 left-6 right-6 h-16 bg-gradient-to-t from-white to-transparent" />
+													<div className="mt-3 flex justify-center">
+														<button
+															type="button"
+															onClick={() => setIsOutputExpanded(true)}
+															className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:border-zinc-500 hover:bg-zinc-100"
+														>
+															Load More
+														</button>
+													</div>
+												</>
+											) : null}
 										</motion.div>
 									</AnimatePresence>
 
@@ -581,6 +675,27 @@ function Home({ authToken = '', userEmail = 'user@example.com', onLogout = () =>
 				</div>
 			</section>
 			</main>
+
+			<ActionPopup
+				isOpen={isLogoutPopupOpen}
+				title="Do you want to logout?"
+				description="You can login again anytime to continue your projects."
+				confirmLabel="Logout"
+				cancelLabel="Cancel"
+				onConfirm={confirmLogout}
+				onCancel={closeLogoutPopup}
+				confirmVariant="danger"
+			/>
+
+			<ActionPopup
+				isOpen={missingOptionsPopup.isOpen}
+				title="Missing Required Options"
+				description={missingOptionsPopup.description}
+				confirmLabel="Okay"
+				onConfirm={() => setMissingOptionsPopup({ isOpen: false, description: '' })}
+				onCancel={() => setMissingOptionsPopup({ isOpen: false, description: '' })}
+				showCancel={false}
+			/>
 		</div>
 	)
 }
