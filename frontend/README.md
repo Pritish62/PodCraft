@@ -1,16 +1,128 @@
-# React + Vite
+# PodCraft
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+PodCraft is an AI podcast script workspace.
 
-Currently, two official plugins are available:
+You can:
+- create and manage podcast projects
+- generate scripts with Gemini
+- regenerate and keep output versions (v1, v2, ...)
+- roll back to older versions
+- highlight any part of output and edit it quickly
+- save your final draft to database
+- download the current script as a `.txt` file
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+It includes authentication, user-specific project history, and a clean editor-style UI.
 
-## React Compiler
+## Tech Stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Frontend: React + Vite + Tailwind + Framer Motion + Axios
+- Backend: Node.js + Express + MongoDB (Mongoose)
+- Auth: JWT
+- AI: Google Gemini API
 
-## Expanding the ESLint configuration
+## Project Structure
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+This repository has two apps:
+
+- `frontend` -> React client
+- `Backend` -> Express API server
+
+## Prerequisites
+
+- Node.js 18+
+- npm
+- MongoDB connection string
+- Gemini API key
+
+## Environment Variables
+
+Create a `.env` file inside `Backend`:
+
+```env
+MONGO_KEY=your_mongodb_connection_string
+KEY=your_gemini_api_key
+JWT_SECRET=your_strong_jwt_secret
+
+# Optional
+PORT=8000
+JWT_EXPIRES_IN=7d
+GEMINI_MODEL=gemini-2.5-flash
+MAX_PROMPT_LENGTH=8000
+```
+
+Create a `.env` file inside `frontend` (optional if backend runs on `http://localhost:8000`):
+
+```env
+VITE_API_URL=http://localhost:8000
+```
+
+## Installation
+
+From project root:
+
+```bash
+cd Backend && npm install
+cd ../frontend && npm install
+```
+
+## Run Locally
+
+Open two terminals from project root.
+
+Terminal 1 (backend):
+
+```bash
+cd Backend
+npm run dev
+```
+
+Terminal 2 (frontend):
+
+```bash
+cd frontend
+npm run dev
+```
+
+Frontend will run on Vite default URL, usually `http://localhost:5173`.
+
+## Build
+
+Frontend:
+
+```bash
+cd frontend
+npm run build
+```
+
+Backend syntax check:
+
+```bash
+cd Backend
+node --check server.js
+```
+
+## Main API Routes
+
+- `POST /api/auth/signup`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `GET /api/projects`
+- `POST /api/projects`
+- `PUT /api/projects/:projectId`
+- `POST /api/projects/generate`
+
+## Typical Workflow
+
+1. Sign up / log in.
+2. Create a project and fill topic details.
+3. Generate script.
+4. Regenerate if needed and switch versions with pills (`v1`, `v2`, ...).
+5. Edit specific lines using highlight popup.
+6. Save project.
+7. Download current version as `.txt`.
+
+## Notes
+
+- If `npm run build` fails in repository root, run it inside `frontend`.
+- Folder name is `Backend` (capital `B`), use that exact path in commands.
+
