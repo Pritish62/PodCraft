@@ -4,6 +4,13 @@ PodCraft is an AI podcast script workspace where you can go from idea to a polis
 
 It is built for quick iteration: write your topic brief, generate a script, tweak specific lines, compare versions, and keep everything saved per user.
 
+## Live Demo
+
+- Frontend: https://pod-craft25.vercel.app/
+# Screnshot 
+
+https://github.com/Pritish62/PodCraft/blob/a8228ffc5ed8e4ae8b95abe9c2e96b73288aee7f/Screenshot%202026-04-24%20113536.png
+
 ## What You Can Do
 
 - Sign up and log in securely.
